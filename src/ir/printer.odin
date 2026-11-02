@@ -242,35 +242,37 @@ const_value_type :: proc(m: ^Module, v: Value) -> Type_Id {
 	return T_PTR
 }
 
+// Attribute and flag writers emit a leading space before each word.
+
 print_linkage_flags :: proc(b: ^strings.Builder, g: ^Global) {
 	switch g.linkage {
 	case .External:
-	case .Internal: strings.write_string(b, "internal ")
-	case .Private:  strings.write_string(b, "private ")
+	case .Internal: strings.write_string(b, " internal")
+	case .Private:  strings.write_string(b, " private")
 	}
 	if .Dso_Local in g.flags {
-		strings.write_string(b, "dso_local ")
+		strings.write_string(b, " dso_local")
 	}
 	if .Hidden in g.flags {
-		strings.write_string(b, "hidden ")
+		strings.write_string(b, " hidden")
 	}
 }
 
 print_global_var :: proc(pr: ^Printer, g: ^Global) {
 	b := pr.b
 	print_name(b, '@', g.name)
-	strings.write_string(b, " = ")
+	strings.write_string(b, " =")
 	if g.init == NONE {
-		strings.write_string(b, "external ")
+		strings.write_string(b, " external")
 	}
 	print_linkage_flags(b, g)
 	if .Unnamed_Addr in g.flags {
-		strings.write_string(b, "unnamed_addr ")
+		strings.write_string(b, " unnamed_addr")
 	}
 	if .Local_Unnamed_Addr in g.flags {
-		strings.write_string(b, "local_unnamed_addr ")
+		strings.write_string(b, " local_unnamed_addr")
 	}
-	strings.write_string(b, "constant " if .Constant in g.flags else "global ")
+	strings.write_string(b, " constant " if .Constant in g.flags else " global ")
 	print_type(pr, g.type)
 	if g.init != NONE {
 		strings.write_byte(b, ' ')
@@ -313,14 +315,10 @@ print_fn_attrs :: proc(b: ^strings.Builder, a: Fn_Attrs) {
 print_function :: proc(pr: ^Printer, g: ^Global) {
 	m, b := pr.m, pr.b
 	is_def := g.body != NO_INDEX
-	strings.write_string(b, "define " if is_def else "declare ")
+	strings.write_string(b, "define" if is_def else "declare")
 	print_linkage_flags(b, g)
-	if g.ret_attrs != {} {
-		// print_param_attrs writes a leading space
-		strings.pop_byte(b)
-		print_param_attrs(b, g.ret_attrs)
-		strings.write_byte(b, ' ')
-	}
+	print_param_attrs(b, g.ret_attrs)
+	strings.write_byte(b, ' ')
 	ft := &m.types[g.type]
 	print_type(pr, ft.elem)
 	strings.write_byte(b, ' ')
