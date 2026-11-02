@@ -33,3 +33,11 @@ Note (2026-10-28): all 38 atomic loads/stores in the corpus use `monotonic` orde
 ## 2026-10-28: Round-trip test as the parser oracle
 
 `tests/roundtrip.sh` parses and prints every corpus file, then checks the output three ways: `llvm-as` accepts it, `llvm-diff` finds no difference in functions, and the global and type definitions match after canonicalizing both sides with `llvm-as | llvm-dis`. The third check exists because `llvm-diff` ignores global initializers (verified by planting a change in a string constant; `llvm-diff` reported no difference).
+
+## 2026-11-02: qemu runner and link setup
+
+**Decision.** Link on the host with the pinned `ld.lld` (`tests/qemu/link.sh`: `-static --no-relax`, `crt1.o crti.o <objs> libm.a libc.a libgcc.a crtn.o`, census musl sysroot). Run under `qemu-riscv64` user mode in a Docker image (`tests/qemu/run.sh`), because qemu user mode only exists on Linux and the dev machine is a Mac.
+
+**libgcc.** musl's `printf` needs binary128 helpers (`__addtf3`, ...). They come from Debian's `libgcc-14-dev-riscv64-cross`, copied out of the image once into `build/qemu/`. That libgcc is built for rv64gc, so linked binaries contain some compressed (C) instructions from libgcc and carry the RVC ELF flag. Our own code stays RV64IMD. This is fair: binaries built by clang and by us link the same libgcc. The planned board supports C, so it does not block runtime measurements either.
+
+**Cost.** About 0.6 s of Docker overhead per run. Fine for now; if the test count grows, keep one container alive and use `docker exec`.
