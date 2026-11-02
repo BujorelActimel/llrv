@@ -19,7 +19,6 @@ Parser :: struct {
 	pos:         int,
 	tok:         Token,
 	opts:        Parse_Options,
-	op_map:      map[string]Opcode,
 	// per function
 	f:           ^Function,
 	fname:       string,
@@ -39,11 +38,6 @@ parse_module :: proc(path: string, src: []u8, opts: Parse_Options = {}) -> ^Modu
 	init_types(m)
 
 	p := Parser{m = m, src = src, opts = opts}
-	for name, op in OPCODE_NAMES {
-		if op != .Invalid && op != .Cond_Br {
-			p.op_map[name] = op
-		}
-	}
 
 	next(&p)
 	for p.tok.kind != .Eof {
@@ -80,6 +74,56 @@ parse_module :: proc(path: string, src: []u8, opts: Parse_Options = {}) -> ^Modu
 }
 
 // --- helpers ---
+
+// Cases are ordered by frequency in the corpus (census).
+lookup_opcode :: proc(s: string) -> (Opcode, bool) {
+	switch s {
+	case "load":          return .Load, true
+	case "store":         return .Store, true
+	case "br":            return .Br, true
+	case "getelementptr": return .Gep, true
+	case "call":          return .Call, true
+	case "alloca":        return .Alloca, true
+	case "icmp":          return .ICmp, true
+	case "zext":          return .ZExt, true
+	case "add":           return .Add, true
+	case "sext":          return .SExt, true
+	case "and":           return .And, true
+	case "ret":           return .Ret, true
+	case "sub":           return .Sub, true
+	case "trunc":         return .Trunc, true
+	case "or":            return .Or, true
+	case "phi":           return .Phi, true
+	case "switch":        return .Switch, true
+	case "xor":           return .Xor, true
+	case "lshr":          return .LShr, true
+	case "shl":           return .Shl, true
+	case "mul":           return .Mul, true
+	case "unreachable":   return .Unreachable, true
+	case "ptrtoint":      return .PtrToInt, true
+	case "select":        return .Select, true
+	case "sdiv":          return .SDiv, true
+	case "fcmp":          return .FCmp, true
+	case "udiv":          return .UDiv, true
+	case "sitofp":        return .SIToFP, true
+	case "srem":          return .SRem, true
+	case "urem":          return .URem, true
+	case "ashr":          return .AShr, true
+	case "fadd":          return .FAdd, true
+	case "fmul":          return .FMul, true
+	case "fptosi":        return .FPToSI, true
+	case "fdiv":          return .FDiv, true
+	case "fsub":          return .FSub, true
+	case "fneg":          return .FNeg, true
+	case "uitofp":        return .UIToFP, true
+	case "fptoui":        return .FPToUI, true
+	case "inttoptr":      return .IntToPtr, true
+	case "fpext":         return .FPExt, true
+	case "frem":          return .FRem, true
+	case "fptrunc":       return .FPTrunc, true
+	}
+	return .Invalid, false
+}
 
 expect :: proc(p: ^Parser, kind: Tok_Kind, what: string) {
 	if p.tok.kind != kind {
@@ -1048,7 +1092,7 @@ parse_instruction :: proc(p: ^Parser) {
 	} else if word == "musttail" {
 		fail(p, pos, "musttail calls are not supported")
 	}
-	op, known := p.op_map[word]
+	op, known := lookup_opcode(word)
 	if !known {
 		fail(p, pos, "unsupported instruction '%s'", word)
 	}
