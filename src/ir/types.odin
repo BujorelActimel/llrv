@@ -57,17 +57,6 @@ init_types :: proc(m: ^Module) {
 	append(&m.types, Type{kind = .Label, defined = true})
 }
 
-int_type :: proc(width: u32) -> (Type_Id, bool) {
-	switch width {
-	case 1:  return T_I1, true
-	case 8:  return T_I8, true
-	case 16: return T_I16, true
-	case 32: return T_I32, true
-	case 64: return T_I64, true
-	}
-	return T_VOID, false
-}
-
 type_of :: #force_inline proc(m: ^Module, t: Type_Id) -> ^Type {
 	return &m.types[t]
 }

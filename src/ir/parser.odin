@@ -295,24 +295,21 @@ parse_type :: proc(p: ^Parser) -> Type_Id {
 	case .Word:
 		s := tok_text(p)
 		switch s {
-		case "void":   t = T_VOID
 		case "ptr":    t = T_PTR
-		case "float":  t = T_FLOAT
+		case "i32":    t = T_I32
+		case "i64":    t = T_I64
+		case "i8":     t = T_I8
+		case "i1":     t = T_I1
+		case "i16":    t = T_I16
+		case "void":   t = T_VOID
 		case "double": t = T_DOUBLE
+		case "float":  t = T_FLOAT
 		case "label":  t = T_LABEL
 		case:
-			if !is_type_word(s) {
-				fail(p, p.tok.pos, "unsupported type '%s'", s)
-			}
-			w: u32
-			for i in 1 ..< len(s) {
-				w = w * 10 + u32(s[i] - '0')
-			}
-			ok: bool
-			t, ok = int_type(w)
-			if !ok {
+			if is_type_word(s) {
 				fail(p, p.tok.pos, "unsupported integer type '%s' (only i1, i8, i16, i32, i64)", s)
 			}
+			fail(p, p.tok.pos, "unsupported type '%s'", s)
 		}
 		next(p)
 	case .LBrack:
