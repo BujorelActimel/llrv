@@ -2,6 +2,8 @@
 
 Goal: `src/target/rv64/encode.odin`, a function from one RV64IMD instruction to its 32-bit encoding. It is checked against 2055 `llvm-mc` encodings in `tests/unit/encoder`.
 
+Status (2026-11-02): implemented, table-driven as suggested below, and passing all cases. This file is now a reading guide to the encoder and to the RISC-V formats; the steps match the order in which the formats are explained in the spec.
+
 ## The contract (what the tests expect)
 
 ```odin
