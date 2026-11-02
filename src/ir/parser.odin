@@ -150,8 +150,8 @@ is_type_word :: proc(s: string) -> bool {
 		return true
 	}
 	if len(s) >= 2 && s[0] == 'i' {
-		for c in s[1:] {
-			if c < '0' || c > '9' {
+		for i in 1 ..< len(s) {
+			if !is_digit(s[i]) {
 				return false
 			}
 		}
@@ -261,8 +261,8 @@ parse_type :: proc(p: ^Parser) -> Type_Id {
 				fail(p, p.tok.pos, "unsupported type '%s'", s)
 			}
 			w: u32
-			for c in s[1:] {
-				w = w * 10 + u32(c - '0')
+			for i in 1 ..< len(s) {
+				w = w * 10 + u32(s[i] - '0')
 			}
 			ok: bool
 			t, ok = int_type(w)
