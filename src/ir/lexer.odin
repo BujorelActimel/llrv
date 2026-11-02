@@ -66,6 +66,22 @@ hex_digit :: #force_inline proc(c: u8) -> (u8, bool) {
 	return 0, false
 }
 
+// Reads hex digits starting at i; returns their value and the index after them.
+@(private)
+scan_hex :: proc(src: []u8, i: int) -> (u64, int) {
+	bits: u64
+	j := i
+	for j < len(src) {
+		digit, ok := hex_digit(src[j])
+		if !ok {
+			break
+		}
+		bits = bits << 4 | u64(digit)
+		j += 1
+	}
+	return bits, j
+}
+
 fail :: proc(p: ^Parser, pos: u32, format: string, args: ..any) -> ! {
 	line, col := 1, 1
 	for i in 0 ..< min(int(pos), len(p.src)) {
@@ -188,14 +204,7 @@ next :: proc(p: ^Parser) {
 				fail(p, tok.pos, "unsupported floating-point literal format (only double hex 0x... is supported)")
 			}
 			bits: u64
-			for i < len(src) {
-				digit, ok := hex_digit(src[i])
-				if !ok {
-					break
-				}
-				bits = bits << 4 | u64(digit)
-				i += 1
-			}
+			bits, i = scan_hex(src, i)
 			tok.kind = .Float
 			tok.ival = i64(bits)
 			tok.end = u32(i)
@@ -229,16 +238,8 @@ next :: proc(p: ^Parser) {
 		tok.kind = .Int
 		tok.ival = -i64(n) if neg else i64(n)
 	case c == 'f' && i + 2 < len(src) && src[i + 1] == '0' && src[i + 2] == 'x':
-		i += 3
 		bits: u64
-		for i < len(src) {
-			digit, ok := hex_digit(src[i])
-			if !ok {
-				break
-			}
-			bits = bits << 4 | u64(digit)
-			i += 1
-		}
+		bits, i = scan_hex(src, i + 3)
 		tok.kind = .Float_Raw
 		tok.ival = i64(bits)
 		tok.end = u32(i)

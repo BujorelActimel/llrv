@@ -688,14 +688,6 @@ parse_const_gep :: proc(p: ^Parser) -> Value {
 
 decode_string :: proc(p: ^Parser, s: string) -> []u8 {
 	out := make([dynamic]u8, 0, len(s), context.temp_allocator)
-	hex :: proc(c: u8) -> (u8, bool) {
-		switch {
-		case c >= '0' && c <= '9': return c - '0', true
-		case c >= 'A' && c <= 'F': return c - 'A' + 10, true
-		case c >= 'a' && c <= 'f': return c - 'a' + 10, true
-		}
-		return 0, false
-	}
 	for i := 0; i < len(s); i += 1 {
 		c := s[i]
 		if c != '\\' {
@@ -710,8 +702,8 @@ decode_string :: proc(p: ^Parser, s: string) -> []u8 {
 		if i + 2 >= len(s) {
 			fail(p, p.tok.pos, "bad escape in string")
 		}
-		hi, ok1 := hex(s[i + 1])
-		lo, ok2 := hex(s[i + 2])
+		hi, ok1 := hex_digit(s[i + 1])
+		lo, ok2 := hex_digit(s[i + 2])
 		if !ok1 || !ok2 {
 			fail(p, p.tok.pos, "bad escape in string")
 		}
