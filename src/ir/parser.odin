@@ -903,29 +903,42 @@ parse_body :: proc(p: ^Parser, gi: u32) {
 	resolve_locals(p)
 }
 
+is_local :: #force_inline proc(v: Value) -> bool {
+	tag := value_tag(v)
+	return v != NONE && (tag == .Local_Num || tag == .Local_Name)
+}
+
 resolve :: #force_inline proc(p: ^Parser, v: Value) -> Value {
-	if v == NONE {
-		return v
-	}
-	#partial switch value_tag(v) {
-	case .Local_Num:
-		n := value_index(v)
-		if n >= u32(len(p.num_slots)) || p.num_slots[n] == NONE {
-			fail(p, p.tok.pos, "use of undefined value %%%d in @%s", n, p.fname)
+	return resolve_chain(p, v) if is_local(v) else v
+}
+
+// A slot can hold another local: a dropped llvm.expect call binds its
+// result to its argument. Follow the chain; a cycle can only come from
+// invalid input, so give up after visiting every slot once.
+resolve_chain :: proc(p: ^Parser, v: Value) -> Value {
+	r := v
+	for steps := 0; is_local(r); steps += 1 {
+		if steps > len(p.num_slots) + len(p.name_vals) {
+			fail(p, p.tok.pos, "cyclic value definition in @%s", p.fname)
 		}
-		return p.num_slots[n]
-	case .Local_Name:
-		r := p.name_vals[value_index(v)]
-		if r == NONE {
-			for name, id in p.name_ids {
-				if id == value_index(v) {
-					fail(p, p.tok.pos, "use of undefined value %%%s in @%s", name, p.fname)
+		idx := value_index(r)
+		if value_tag(r) == .Local_Num {
+			if idx >= u32(len(p.num_slots)) || p.num_slots[idx] == NONE {
+				fail(p, p.tok.pos, "use of undefined value %%%d in @%s", idx, p.fname)
+			}
+			r = p.num_slots[idx]
+		} else {
+			if p.name_vals[idx] == NONE {
+				for name, id in p.name_ids {
+					if id == idx {
+						fail(p, p.tok.pos, "use of undefined value %%%s in @%s", name, p.fname)
+					}
 				}
 			}
+			r = p.name_vals[idx]
 		}
-		return r
 	}
-	return v
+	return r
 }
 
 // Replaces parser-only %N / %name references by the values they name.
