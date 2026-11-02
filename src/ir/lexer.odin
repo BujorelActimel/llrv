@@ -151,9 +151,20 @@ next :: proc(p: ^Parser) {
 		p.pos = i
 		return
 	}
+	// Dispatch on the first byte.
 	c := src[i]
-	switch {
-	case c == '@' || c == '%':
+	switch c {
+	case 'a' ..= 'z', 'A' ..= 'Z', '_', '$':
+		if c == 'f' && i + 2 < len(src) && src[i + 1] == '0' && src[i + 2] == 'x' {
+			bits: u64
+			bits, i = scan_hex(src, i + 3)
+			tok.kind = .Float_Raw
+			tok.ival = i64(bits)
+			tok.end = u32(i)
+		} else {
+			i = lex_word(p, &tok, i)
+		}
+	case '%', '@':
 		i += 1
 		if i < len(src) && src[i] == '"' {
 			j := scan_string(p, i)
@@ -180,7 +191,17 @@ next :: proc(p: ^Parser) {
 			}
 			tok.kind = .Global if c == '@' else .Local_Name
 		}
-	case c == '!':
+	case '0' ..= '9':
+		i = lex_number(p, &tok, i)
+	case '-', '+':
+		if c == '-' && i + 1 < len(src) && is_digit(src[i + 1]) {
+			i = lex_number(p, &tok, i)
+		} else if i + 1 < len(src) && is_word_start(src[i + 1]) {
+			i = lex_special_float(p, &tok, i)
+		} else {
+			fail(p, tok.pos, "unexpected character '%c'", c)
+		}
+	case '!':
 		i += 1
 		if i < len(src) && is_word_char(src[i]) {
 			tok.start = u32(i)
@@ -193,7 +214,7 @@ next :: proc(p: ^Parser) {
 			tok.kind = .Exclaim
 			tok.end = u32(i)
 		}
-	case c == '#':
+	case '#':
 		i += 1
 		n: i64
 		for i < len(src) && is_digit(src[i]) {
@@ -203,100 +224,18 @@ next :: proc(p: ^Parser) {
 		tok.kind = .Attr_Ref
 		tok.ival = n
 		tok.end = u32(i)
-	case c == '"':
+	case '"':
 		j := scan_string(p, i)
 		tok.kind = .Str
 		tok.start, tok.end = u32(i + 1), u32(j)
 		i = j + 1
-	case is_digit(c) || (c == '-' && i + 1 < len(src) && is_digit(src[i + 1])):
-		neg := c == '-'
-		if neg {
-			i += 1
-		}
-		if src[i] == '0' && i + 1 < len(src) && src[i + 1] == 'x' {
-			i += 2
-			if i < len(src) && (src[i] == 'K' || src[i] == 'L' || src[i] == 'M' || src[i] == 'H' || src[i] == 'R') {
-				fail(p, tok.pos, "unsupported floating-point literal format (only double hex 0x... is supported)")
-			}
-			bits: u64
-			bits, i = scan_hex(src, i)
-			tok.kind = .Float
-			tok.ival = i64(bits)
+	case '.':
+		if i + 2 < len(src) && src[i + 1] == '.' && src[i + 2] == '.' {
+			tok.kind = .Dots
+			i += 3
 			tok.end = u32(i)
-			break
-		}
-		n: u64
-		for i < len(src) && is_digit(src[i]) {
-			n = n * 10 + u64(src[i] - '0')
-			i += 1
-		}
-		if i < len(src) && (src[i] == '.' || src[i] == 'e' || src[i] == 'E') {
-			for i < len(src) && (is_digit(src[i]) || src[i] == '.' || src[i] == 'e' || src[i] == 'E' || src[i] == '+' || src[i] == '-') {
-				i += 1
-			}
-			tok.end = u32(i)
-			f, ok := strconv.parse_f64(string(src[tok.start:tok.end]))
-			if !ok {
-				fail(p, tok.pos, "invalid floating-point literal '%s'", string(src[tok.start:tok.end]))
-			}
-			tok.kind = .Float
-			tok.ival = transmute(i64)f
-			break
-		}
-		tok.end = u32(i)
-		if !neg && i < len(src) && src[i] == ':' {
-			tok.kind = .Label_Num
-			tok.ival = i64(n)
-			i += 1
-			break
-		}
-		tok.kind = .Int
-		tok.ival = -i64(n) if neg else i64(n)
-	case c == 'f' && i + 2 < len(src) && src[i + 1] == '0' && src[i + 2] == 'x':
-		bits: u64
-		bits, i = scan_hex(src, i + 3)
-		tok.kind = .Float_Raw
-		tok.ival = i64(bits)
-		tok.end = u32(i)
-	case (c == '+' || c == '-') && i + 1 < len(src) && is_word_start(src[i + 1]):
-		j := i + 1
-		for j < len(src) && is_word_char(src[j]) {
-			j += 1
-		}
-		bits: u64
-		switch string(src[i + 1:j]) {
-		case "inf":  bits = 0x7FF0_0000_0000_0000
-		case "qnan": bits = 0x7FF8_0000_0000_0000
-		case:
-			fail(p, tok.pos, "unsupported floating-point literal '%s'", string(src[i:j]))
-		}
-		if c == '-' {
-			bits |= 0x8000_0000_0000_0000
-		}
-		tok.kind = .Float
-		tok.ival = i64(bits)
-		i = j
-		tok.end = u32(i)
-	case c == '.' && i + 2 < len(src) && src[i + 1] == '.' && src[i + 2] == '.':
-		tok.kind = .Dots
-		i += 3
-		tok.end = u32(i)
-	case is_word_start(c):
-		for i < len(src) && is_word_char(src[i]) {
-			i += 1
-		}
-		tok.end = u32(i)
-		tok.kind = .Word
-		if i < len(src) {
-			if src[i] == '"' && tok.end - tok.start == 1 && c == 'c' {
-				j := scan_string(p, i)
-				tok.kind = .CStr
-				tok.start, tok.end = u32(i + 1), u32(j)
-				i = j + 1
-			} else if src[i] == ':' {
-				tok.kind = .Label_Name
-				i += 1
-			}
+		} else {
+			i = lex_word(p, &tok, i)
 		}
 	case:
 		i += 1
@@ -319,6 +258,105 @@ next :: proc(p: ^Parser) {
 	}
 	p.tok = tok
 	p.pos = i
+}
+
+// Word, label (name:) or c"..." string starting at i.
+@(private)
+lex_word :: #force_inline proc(p: ^Parser, tok: ^Token, start: int) -> int {
+	src := p.src
+	i := start
+	for i < len(src) && is_word_char(src[i]) {
+		i += 1
+	}
+	tok.end = u32(i)
+	tok.kind = .Word
+	if i < len(src) {
+		if src[i] == '"' && i - start == 1 && src[start] == 'c' {
+			j := scan_string(p, i)
+			tok.kind = .CStr
+			tok.start, tok.end = u32(i + 1), u32(j)
+			i = j + 1
+		} else if src[i] == ':' {
+			tok.kind = .Label_Name
+			i += 1
+		}
+	}
+	return i
+}
+
+// Integer, label number (N:), decimal float or 0x hex double starting at i.
+@(private)
+lex_number :: proc(p: ^Parser, tok: ^Token, start: int) -> int {
+	src := p.src
+	i := start
+	neg := src[i] == '-'
+	if neg {
+		i += 1
+	}
+	if src[i] == '0' && i + 1 < len(src) && src[i + 1] == 'x' {
+		i += 2
+		if i < len(src) && (src[i] == 'K' || src[i] == 'L' || src[i] == 'M' || src[i] == 'H' || src[i] == 'R') {
+			fail(p, tok.pos, "unsupported floating-point literal format (only double hex 0x... is supported)")
+		}
+		bits: u64
+		bits, i = scan_hex(src, i)
+		tok.kind = .Float
+		tok.ival = i64(bits)
+		tok.end = u32(i)
+		return i
+	}
+	n: u64
+	for i < len(src) && is_digit(src[i]) {
+		n = n * 10 + u64(src[i] - '0')
+		i += 1
+	}
+	if i < len(src) && (src[i] == '.' || src[i] == 'e' || src[i] == 'E') {
+		for i < len(src) && (is_digit(src[i]) || src[i] == '.' || src[i] == 'e' || src[i] == 'E' || src[i] == '+' || src[i] == '-') {
+			i += 1
+		}
+		tok.end = u32(i)
+		text := string(src[tok.start:tok.end])
+		f, ok := strconv.parse_f64(text)
+		if !ok {
+			fail(p, tok.pos, "invalid floating-point literal '%s'", text)
+		}
+		tok.kind = .Float
+		tok.ival = transmute(i64)f
+		return i
+	}
+	tok.end = u32(i)
+	if !neg && i < len(src) && src[i] == ':' {
+		tok.kind = .Label_Num
+		tok.ival = i64(n)
+		return i + 1
+	}
+	tok.kind = .Int
+	tok.ival = -i64(n) if neg else i64(n)
+	return i
+}
+
+// +inf, -inf, +qnan, -qnan starting at i.
+@(private)
+lex_special_float :: proc(p: ^Parser, tok: ^Token, start: int) -> int {
+	src := p.src
+	j := start + 1
+	for j < len(src) && is_word_char(src[j]) {
+		j += 1
+	}
+	bits: u64
+	switch string(src[start + 1:j]) {
+	case "inf":  bits = 0x7FF0_0000_0000_0000
+	case "qnan": bits = 0x7FF8_0000_0000_0000
+	case:
+		fail(p, tok.pos, "unsupported floating-point literal '%s'", string(src[start:j]))
+	}
+	if src[start] == '-' {
+		bits |= 0x8000_0000_0000_0000
+	}
+	tok.kind = .Float
+	tok.ival = i64(bits)
+	tok.end = u32(j)
+	return j
 }
 
 // Skips the rest of the line the current token starts on (used for
