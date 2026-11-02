@@ -57,6 +57,7 @@ Opcode :: enum u8 {
 	Br, Cond_Br, Switch, Ret, Unreachable,
 }
 
+@(rodata)
 OPCODE_NAMES := [Opcode]string {
 	.Invalid     = "<invalid>",
 	.Add         = "add",
@@ -110,6 +111,7 @@ is_cast :: #force_inline proc(op: Opcode) -> bool { return op >= .Trunc && op <=
 is_terminator :: #force_inline proc(op: Opcode) -> bool { return op >= .Br }
 
 ICmp_Pred :: enum u8 { Eq, Ne, Ugt, Uge, Ult, Ule, Sgt, Sge, Slt, Sle }
+@(rodata)
 ICMP_NAMES := [ICmp_Pred]string {
 	.Eq = "eq", .Ne = "ne", .Ugt = "ugt", .Uge = "uge", .Ult = "ult",
 	.Ule = "ule", .Sgt = "sgt", .Sge = "sge", .Slt = "slt", .Sle = "sle",
@@ -118,6 +120,7 @@ ICMP_NAMES := [ICmp_Pred]string {
 FCmp_Pred :: enum u8 {
 	False, Oeq, Ogt, Oge, Olt, Ole, One, Ord, Ueq, Ugt, Uge, Ult, Ule, Une, Uno, True,
 }
+@(rodata)
 FCMP_NAMES := [FCmp_Pred]string {
 	.False = "false", .Oeq = "oeq", .Ogt = "ogt", .Oge = "oge", .Olt = "olt", .Ole = "ole",
 	.One = "one", .Ord = "ord", .Ueq = "ueq", .Ugt = "ugt", .Uge = "uge", .Ult = "ult",
@@ -125,6 +128,7 @@ FCMP_NAMES := [FCmp_Pred]string {
 }
 
 Ordering :: enum u8 { Not_Atomic, Unordered, Monotonic, Acquire, Release, Acq_Rel, Seq_Cst }
+@(rodata)
 ORDERING_NAMES := [Ordering]string {
 	.Not_Atomic = "", .Unordered = "unordered", .Monotonic = "monotonic", .Acquire = "acquire",
 	.Release = "release", .Acq_Rel = "acq_rel", .Seq_Cst = "seq_cst",
