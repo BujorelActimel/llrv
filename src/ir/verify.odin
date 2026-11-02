@@ -182,6 +182,9 @@ verify_inst :: proc(v: ^Verifier, ii: u32, fty: ^Type) {
 		expect_type(v, ii, check_operand(v, ii, inst.ops[0]), inst.type, "operand 0")
 		expect_type(v, ii, check_operand(v, ii, inst.ops[1]), inst.type, "operand 1")
 	case .FNeg:
+		if !is_fp(m, inst.type) {
+			errorf(v, ii, "floating-point operation on non-fp type")
+		}
 		expect_type(v, ii, check_operand(v, ii, inst.ops[0]), inst.type, "operand")
 	case .ICmp, .FCmp:
 		a := check_operand(v, ii, inst.ops[0])
