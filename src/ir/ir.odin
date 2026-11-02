@@ -26,6 +26,9 @@ TAG_SHIFT  :: 29
 INDEX_MASK :: (u32(1) << TAG_SHIFT) - 1
 
 make_value :: #force_inline proc "contextless" (tag: Value_Tag, index: u32) -> Value {
+	when ODIN_DEBUG {
+		assert_contextless(index <= INDEX_MASK, "value index does not fit in 29 bits")
+	}
 	return Value(u32(tag) << TAG_SHIFT | index)
 }
 
@@ -457,6 +460,7 @@ append_inst :: proc(f: ^Function, b: u32, inst: Inst) -> u32 {
 // Unlinks instruction i from its block. Its id stays valid but unused.
 remove_inst :: proc(f: ^Function, i: u32) {
 	n := f.nodes[i]
+	assert(n.block != NO_INDEX, "instruction already removed")
 	blk := &f.blocks[n.block]
 	if n.prev == NO_INDEX { blk.first = n.next } else { f.nodes[n.prev].next = n.next }
 	if n.next == NO_INDEX { blk.last = n.prev } else { f.nodes[n.next].prev = n.prev }
