@@ -42,20 +42,35 @@ Token :: struct {
 	ival:  i64,
 }
 
-@(private)
-is_word_start :: #force_inline proc(c: u8) -> bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '.' || c == '$'
+// Byte classes, one table lookup per byte in the scanning loops.
+C_START :: 1 // may start a word
+C_WORD  :: 2 // may continue a word
+C_DIGIT :: 4
+C_SPACE :: 8
+
+@(private, rodata)
+CHAR_CLASS := [256]u8 {
+	'a' ..= 'z' = C_START | C_WORD,
+	'A' ..= 'Z' = C_START | C_WORD,
+	'_'         = C_START | C_WORD,
+	'.'         = C_START | C_WORD,
+	'$'         = C_START | C_WORD,
+	'0' ..= '9' = C_WORD | C_DIGIT,
+	'-'         = C_WORD,
+	' '         = C_SPACE,
+	'\t'        = C_SPACE,
+	'\n'        = C_SPACE,
+	'\r'        = C_SPACE,
 }
 
 @(private)
-is_word_char :: #force_inline proc(c: u8) -> bool {
-	return is_word_start(c) || (c >= '0' && c <= '9') || c == '-'
-}
+is_word_start :: #force_inline proc(c: u8) -> bool { return CHAR_CLASS[c] & C_START != 0 }
 
 @(private)
-is_digit :: #force_inline proc(c: u8) -> bool {
-	return c >= '0' && c <= '9'
-}
+is_word_char :: #force_inline proc(c: u8) -> bool { return CHAR_CLASS[c] & C_WORD != 0 }
+
+@(private)
+is_digit :: #force_inline proc(c: u8) -> bool { return CHAR_CLASS[c] & C_DIGIT != 0 }
 
 hex_digit :: #force_inline proc(c: u8) -> (u8, bool) {
 	switch {
@@ -118,7 +133,7 @@ next :: proc(p: ^Parser) {
 	i := p.pos
 	for i < len(src) {
 		c := src[i]
-		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+		if CHAR_CLASS[c] & C_SPACE != 0 {
 			i += 1
 		} else if c == ';' {
 			for i < len(src) && src[i] != '\n' {
