@@ -1150,11 +1150,10 @@ parse_instruction :: proc(p: ^Parser) {
 				expect(p, .Meta, "metadata node")
 			} else {
 				cpos := p.tok.pos
-				count, ct := parse_typed_value(p)
+				count, _ := parse_typed_value(p)
 				if value_tag(count) != .Const || m.consts[value_index(count)].kind != .Int || m.consts[value_index(count)].val != 1 {
 					fail(p, cpos, "dynamic or multi-element alloca is not supported")
 				}
-				_ = ct
 			}
 		}
 	case .Load:
