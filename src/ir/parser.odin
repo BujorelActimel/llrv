@@ -1057,6 +1057,7 @@ parse_instruction :: proc(p: ^Parser) {
 	inst := Inst{op = op, ops = {NONE, NONE, NONE}}
 	bind := NONE // value the result name refers to, if it is not the instruction itself
 	emit := true
+	group := NO_INDEX // call-site attribute group
 
 	switch op {
 	case .Add, .Sub, .Mul, .SDiv, .UDiv, .SRem, .URem, .Shl, .LShr, .AShr, .And, .Or, .Xor, .FAdd, .FSub, .FMul, .FDiv, .FRem:
@@ -1225,7 +1226,7 @@ parse_instruction :: proc(p: ^Parser) {
 			fail(p, pos, "getelementptr without indices is not supported")
 		}
 	case .Call:
-		bind, emit = parse_call(p, &inst, pos)
+		bind, emit, group = parse_call(p, &inst, pos)
 	case .Br:
 		if is_word(p, "label") {
 			inst.ops[0] = parse_label(p)
@@ -1288,6 +1289,9 @@ parse_instruction :: proc(p: ^Parser) {
 		return
 	}
 	idx := append_inst(f, p.cur_block, inst)
+	if group != NO_INDEX {
+		append(&p.call_groups, [3]u32{u32(len(m.funcs) - 1), idx, group})
+	}
 	v := make_value(.Inst, idx)
 	if has_result {
 		if result_type(&f.insts[idx]) == T_VOID {
@@ -1299,8 +1303,9 @@ parse_instruction :: proc(p: ^Parser) {
 	}
 }
 
-// Returns (value to bind the result to instead of the call, emit the call).
-parse_call :: proc(p: ^Parser, inst: ^Inst, pos: u32) -> (Value, bool) {
+// Returns the value to bind the result to instead of the call, whether to
+// emit the call, and its call-site attribute group (NO_INDEX if none).
+parse_call :: proc(p: ^Parser, inst: ^Inst, pos: u32) -> (Value, bool, u32) {
 	m := p.m
 	f := p.f
 	for p.tok.kind == .Word {
@@ -1381,10 +1386,10 @@ parse_call :: proc(p: ^Parser, inst: ^Inst, pos: u32) -> (Value, bool) {
 		name := m.globals[callee_global].name
 		if len(name) > 5 && name[:5] == "llvm." {
 			if name == "llvm.lifetime.start.p0" || name == "llvm.lifetime.end.p0" {
-				return NONE, false
+				return NONE, false, NO_INDEX
 			}
 			if len(name) > 12 && name[:12] == "llvm.expect." {
-				return args[0], false
+				return args[0], false, NO_INDEX
 			}
 		}
 	}
@@ -1400,10 +1405,7 @@ parse_call :: proc(p: ^Parser, inst: ^Inst, pos: u32) -> (Value, bool) {
 	inst.ops[0] = Value(start)
 	inst.ops[1] = Value(u32(len(args)))
 	inst.ops[2] = Value(u32(fnty))
-	if group != NO_INDEX {
-		append(&p.call_groups, [3]u32{u32(len(p.m.funcs) - 1), u32(len(f.insts)), group})
-	}
-	return NONE, true
+	return NONE, true, group
 }
 
 // --- finish ---
