@@ -1,5 +1,7 @@
 package ir
 
+import "core:strings"
+
 // Types are interned per module and referenced by Type_Id. The builtin
 // scalar types have fixed ids so the parser and passes can use them
 // without lookups.
@@ -92,10 +94,11 @@ array_type :: proc(m: ^Module, elem: Type_Id, count: u64) -> Type_Id {
 }
 
 // Anonymous structs and function types are interned by a byte key built
-// from their member ids.
+// from their member ids. The key is temp allocated and cloned only when a
+// new type is inserted.
 @(private)
 member_key :: proc(tag: u8, head: Type_Id, members: []Type_Id) -> string {
-	key := make([]u8, 5 + 4 * len(members))
+	key := make([]u8, 5 + 4 * len(members), context.temp_allocator)
 	key[0] = tag
 	(^u32)(&key[1])^ = u32(head)
 	for t, i in members {
@@ -119,7 +122,7 @@ struct_type :: proc(m: ^Module, fields: []Type_Id, packed: bool) -> Type_Id {
 	t := Type_Id(len(m.types))
 	first := append_members(m, fields)
 	append(&m.types, Type{kind = .Struct, packed = packed, first = first, n = u32(len(fields)), defined = true})
-	m.anon_types[key] = t
+	m.anon_types[strings.clone(key)] = t
 	return t
 }
 
@@ -131,7 +134,7 @@ func_type :: proc(m: ^Module, ret: Type_Id, params: []Type_Id, vararg: bool) -> 
 	t := Type_Id(len(m.types))
 	first := append_members(m, params)
 	append(&m.types, Type{kind = .Func, vararg = vararg, elem = ret, first = first, n = u32(len(params)), defined = true})
-	m.anon_types[key] = t
+	m.anon_types[strings.clone(key)] = t
 	return t
 }
 
