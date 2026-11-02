@@ -370,10 +370,6 @@ const_bytes :: proc(m: ^Module, c: ^Const) -> []u8 {
 
 // --- instructions ---
 
-inst_extra :: proc(f: ^Function, start, n: u32) -> []Value {
-	return f.extra[start:start + n]
-}
-
 phi_count :: #force_inline proc(inst: ^Inst) -> u32 { return u32(inst.ops[1]) }
 phi_value :: #force_inline proc(f: ^Function, inst: ^Inst, i: u32) -> Value { return f.extra[u32(inst.ops[0]) + 2 * i] }
 phi_block :: #force_inline proc(f: ^Function, inst: ^Inst, i: u32) -> Value { return f.extra[u32(inst.ops[0]) + 2 * i + 1] }
