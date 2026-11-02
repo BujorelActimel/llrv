@@ -1,9 +1,11 @@
 #!/bin/sh
 # Round-trip every .ll file under a directory through llrv and check the
-# result with LLVM: llvm-as must accept it, llvm-diff must find no
-# difference in the functions, and the globals and named types must be
-# identical after both files are canonicalized by llvm-as | llvm-dis
-# (llvm-diff does not compare global initializers).
+# result with LLVM. Each file must first pass the verifier in the default
+# mode (hints dropped). Then, with hints kept: llvm-as must accept the
+# output, llvm-diff must find no difference in the functions, and the
+# globals and named types must be identical after both files are
+# canonicalized by llvm-as | llvm-dis (llvm-diff does not compare global
+# initializers).
 #
 # Usage: tests/roundtrip.sh [corpus-dir]   (default: census/work/out)
 # Env:   LLRV=path/to/llrv (default: build/llrv-debug)
@@ -17,6 +19,13 @@ pass=0
 fail=0
 for f in $(find "$CORPUS" -name '*.ll' | sort); do
 	o="$OUT/$(basename "$f")"
+	# default mode drops hints, which rebinds values; it must still verify
+	if ! "$LLRV" "$f" --verify 2>"$OUT/err.txt"; then
+		echo "FAIL verify  $f"
+		head -5 "$OUT/err.txt"
+		fail=$((fail + 1))
+		continue
+	fi
 	if ! "$LLRV" "$f" --keep-hints --verify --emit-ll -o "$o" 2>"$OUT/err.txt"; then
 		echo "FAIL llrv     $f"
 		head -5 "$OUT/err.txt"
