@@ -41,3 +41,15 @@ Note (2026-10-28): all 38 atomic loads/stores in the corpus use `monotonic` orde
 **libgcc.** musl's `printf` needs binary128 helpers (`__addtf3`, ...). They come from Debian's `libgcc-14-dev-riscv64-cross`, copied out of the image once into `build/qemu/`. That libgcc is built for rv64gc, so linked binaries contain some compressed (C) instructions from libgcc and carry the RVC ELF flag. Our own code stays RV64IMD. This is fair: binaries built by clang and by us link the same libgcc. The planned board supports C, so it does not block runtime measurements either.
 
 **Cost.** About 0.6 s of Docker overhead per run. Fine for now; if the test count grows, keep one container alive and use `docker exec`.
+
+## 2026-11-13: ELF relocatable writer
+
+**Decision.** `src/obj/elf.odin` writes ELF64 relocatable objects directly from an in-memory `Object` (sections with bytes, symbols, relocations). The writer adds the bookkeeping sections itself: `.rela.<name>` per section with relocations, `.riscv.attributes`, an empty `.note.GNU-stack`, `.symtab`, `.strtab`, `.shstrtab`. `e_flags` is `EF_RISCV_FLOAT_ABI_DOUBLE` (0x4), without `EF_RISCV_RVC`.
+
+- Relocation types are only the ones the ISA census found in LLVM's output: `R_RISCV_64`, `CALL_PLT`, `PCREL_HI20`, `PCREL_LO12_I`, `PCREL_LO12_S`. `PCREL_LO12_*` point at a local label on the matching `auipc`, as clang does. Intra-section branches and `jal` are resolved by us, so there is no `R_RISCV_BRANCH`/`JAL`.
+- `.riscv.attributes` has the same content clang emits (`stack_align` 16, arch `rv64i2p1_m2p0_f2p2_d2p2_zicsr2p0_zmmul1p0`), so lld merges it without complaint and objdump picks the right extensions.
+- Symbols can be added before they are defined (forward calls) and defined later. Locals are moved in front of globals at write time; caller ids stay stable.
+- No mapping symbols (`$x`, `$d`): lld does not need them, and objdump disassembles fine without them.
+- Strings in `.strtab` are not deduplicated or tail-merged. Revisit only if object size or write time shows up in a measurement.
+
+**Test.** `tests/obj/run.sh` builds a hand-encoded hello object (all four section kinds, all five relocation types), compares it with `llvm-mc`'s object for the same assembly (`tests/obj/hello.s`) after normalizing section and symbol order, then links it with musl and runs it under qemu (prints a string through a `.data` pointer, exits with a value stored to and loaded from `.bss`).
