@@ -53,3 +53,17 @@ Note (2026-10-28): all 38 atomic loads/stores in the corpus use `monotonic` orde
 - Strings in `.strtab` are not deduplicated or tail-merged. Revisit only if object size or write time shows up in a measurement.
 
 **Test.** `tests/obj/run.sh` builds a hand-encoded hello object (all four section kinds, all five relocation types), compares it with `llvm-mc`'s object for the same assembly (`tests/obj/hello.s`) after normalizing section and symbol order, then links it with musl and runs it under qemu (prints a string through a `.data` pointer, exits with a value stored to and loaded from `.bss`).
+
+## 2026-11-16: Atomic libcalls in the baseline link
+
+**Problem.** Without the A extension, llc lowers the corpus's 38 `load atomic` / `store atomic` to `__atomic_{load,store}_{1,2,4,8}` libcalls. musl does not provide them, so the clang -O1 SQLite baseline did not link.
+
+**Decision.** `tests/qemu/atomic_shim.c` implements them as plain (volatile) loads and stores. `tests/qemu/link.sh` builds it with the pinned clang and the corpus flags (`-march=rv64imd`) into `build/qemu/libatomic_shim.a` and passes the archive on every link, after libc and libgcc. As an archive it is only pulled in when referenced: llrv's output never references it, the baseline does.
+
+**Why it is correct.** `SQLITE_THREADSAFE=0` (single-threaded), every atomic in the corpus is `monotonic`, and a naturally aligned 1/2/4/8-byte load or store is single-copy atomic on RV64. This is the same lowering llrv uses inline (2026-10-27/28 entries).
+
+**Rejected.** Debian's `libatomic.a` from the qemu image: built for rv64gc (uses A and C) and for glibc. It would put instructions into the baseline that our target configuration excludes, and may not link against musl.
+
+**Bias, to disclose in the evaluation.** The baseline pays a call and return per atomic access, while llrv does a plain load or store inline. This favours llrv slightly. Most call sites are in configuration and initialization (`sqlite3_config`, `sqlite3_initialize`, soft heap limit), with some on per-statement paths (`sqlite3_step`, `sqlite3RunParser`). To do: once speedtest1 runs in the benchmark harness, count the dynamic shim calls (counting variant of the shim, or the qemu instruction-count plugin) and report them against the total instruction count.
+
+**Note.** Use `speedtest1 --testset main`. The default testset continues into "rtree", which is not compiled in, and exits with status 1.
